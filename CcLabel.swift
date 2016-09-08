@@ -2,7 +2,17 @@ import Foundation
 import UIKit
 
 /*
- * Implements 4-connectivity connected component labelling
+ * Implements 4-connectivity connected component labelling. Call the `labelImageFast` function to label your image.
+ * Optionally, the bounding boxes of the components can be computed by passing-in `true` for the
+ * `calculateBoundingBoxes` parameter.
+ * 
+ * TODO:
+ * * Automated tests
+ * * Better documentation
+ * * Code tidy-up (break long methods up a bit)
+ * * Performance results
+ * * 8-connectivity
+ *
  */
 class CcLabel {
 

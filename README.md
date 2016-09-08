@@ -25,4 +25,6 @@ class func binarizeImage(image: UIImage) -> UIImage {
 
  * Automated tests
  * Better documentation
+ * Code tidy-up (break long methods up a bit)
+ * Performance results
  * 8-connectivity

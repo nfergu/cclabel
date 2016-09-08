@@ -1,11 +1,3 @@
-//
-//  Cch.swift
-//  txt
-//
-//  Created by nferguson on 01/03/2016.
-//  Copyright © 2016 nferguson. All rights reserved.
-//
-
 import Foundation
 import UIKit
 

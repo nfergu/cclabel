@@ -28,3 +28,7 @@ class func binarizeImage(image: UIImage) -> UIImage {
  * Code tidy-up (break long methods up a bit)
  * Performance results
  * 8-connectivity
+
+# License
+
+CCLabel is licensed under the [Apache License, Version 2.0](LICENSE.md)

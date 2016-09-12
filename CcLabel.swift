@@ -9,12 +9,17 @@ import UIKit
  * TODO:
  * * Automated tests
  * * Better documentation
- * * Code tidy-up (break long methods up a bit)
+ * * Some code tidy-up
  * * Performance results
  * * 8-connectivity
  *
  */
 class CcLabel {
+
+    // Implementation notes: a 2 pass approach is used, with the first pass performing preliminary labelling,
+    // and identifying labels that should be merged. The first pass can also perform merging itself, under
+    // certain circumstances, as an optimisation. The labels are then merged, and a second pass is performed
+    // to apply the final (merged) labels to the content.
 
     func labelImageFast(image: UIImage, calculateBoundingBoxes: Bool) -> LabelledData {
         let rawImageData = getRawImageData(image)
@@ -23,8 +28,6 @@ class CcLabel {
     
     func labelImageFast(data: [[Bool]], calculateBoundingBoxes: Bool) -> LabelledData {
     
-        let start = NSDate()
-        
         let width = data[0].count
         let height = data.count
      
@@ -112,56 +115,14 @@ class CcLabel {
             outputData[row] = outputRow
         
         }
- 
+        
         // Compress the label merges so that each label points to its ultimate
         // destination, or -1 if it is not merged
         let finalLabels = getFinalLabels(&labelMerges)
         
-        var boundingBoxes = [Int: BoundingBox]()
-        
-        var nonBackgroundPixels = 0
-        
-        for row in 0 ..< height {
-            var previousLabelInRow = -1
-            for col in 0 ..< width {
-                var label = outputData[row][col]
-                if (label >= 0) {
-                    nonBackgroundPixels += 1
-                    if let component = finalLabels[label] {
-                        if (component.getLabel() != label) {
-                            label = component.getLabel()
-                            outputData[row][col] = label
-                        }
-                    }
-                }
-                // If the label has changed (or we have reached the end of the row)
-                // then we may need to expand the bounding box, or create a new one
-                if (calculateBoundingBoxes && (label != previousLabelInRow || col == width - 1)) {
-                    // If the previous pixel was black then its bounding box will need to be expanded
-                    // (we have reached the end of the row for this component). Otherwise, if
-                    // the previous pixel was white then we may need to create a new bounding box
-                    // (this is potentially the start of the component).
-                    if previousLabelInRow >= 0 {
-                        boundingBoxes[previousLabelInRow]?.expand(col-1, y: row)
-                    }
-                    else if label >= 0 && boundingBoxes[label] == nil {
-                        boundingBoxes[label] = BoundingBox(label: label, x_start: col, y_start: row)
-                    }
-                }
-                previousLabelInRow = label
-            }
-        }
-        
-        let end = NSDate();
-        print("Performed labelling in " + String(end.timeIntervalSinceDate(start)) + " seconds")
-        
-        if (calculateBoundingBoxes) {
-            return LabelledData(labelMatrix: outputData, nonBackgroundPixels: nonBackgroundPixels, boundingBoxes: boundingBoxes)
-        }
-        else {
-            return LabelledData(labelMatrix: outputData, nonBackgroundPixels: nonBackgroundPixels, boundingBoxes: nil)
-        }
-        
+        return computeFinalData(finalLabels, height: height, width: width,
+                calculateBoundingBoxes: calculateBoundingBoxes, outputData: &outputData)
+ 
     }
     
     func printRawImageData(rawData: [[Bool]]) {
@@ -203,7 +164,54 @@ class CcLabel {
         }
     }
     
-    func getFinalLabels(inout labelMerges: [Int: Set<Int>]) -> [Int: Component] {
+    private func computeFinalData(finalLabels: [Int: Component], height: Int, width: Int,
+            calculateBoundingBoxes: Bool, inout outputData: [[Int]]) -> LabelledData {
+        
+        var boundingBoxes = [Int: BoundingBox]()
+        
+        var nonBackgroundPixels = 0
+        
+        for row in 0 ..< height {
+            var previousLabelInRow = -1
+            for col in 0 ..< width {
+                var label = outputData[row][col]
+                if (label >= 0) {
+                    nonBackgroundPixels += 1
+                    if let component = finalLabels[label] {
+                        if (component.getLabel() != label) {
+                            label = component.getLabel()
+                            outputData[row][col] = label
+                        }
+                    }
+                }
+                // If the label has changed (or we have reached the end of the row)
+                // then we may need to expand the bounding box, or create a new one
+                if (calculateBoundingBoxes && (label != previousLabelInRow || col == width - 1)) {
+                    // If the previous pixel was black then its bounding box will need to be expanded
+                    // (we have reached the end of the row for this component). Otherwise, if
+                    // the previous pixel was white then we may need to create a new bounding box
+                    // (this is potentially the start of the component).
+                    if previousLabelInRow >= 0 {
+                        boundingBoxes[previousLabelInRow]?.expand(col-1, y: row)
+                    }
+                    else if label >= 0 && boundingBoxes[label] == nil {
+                        boundingBoxes[label] = BoundingBox(label: label, x_start: col, y_start: row)
+                    }
+                }
+                previousLabelInRow = label
+            }
+        }
+        
+        if (calculateBoundingBoxes) {
+            return LabelledData(labelMatrix: outputData, nonBackgroundPixels: nonBackgroundPixels, boundingBoxes: boundingBoxes)
+        }
+        else {
+            return LabelledData(labelMatrix: outputData, nonBackgroundPixels: nonBackgroundPixels, boundingBoxes: nil)
+        }
+        
+    }
+    
+    private func getFinalLabels(inout labelMerges: [Int: Set<Int>]) -> [Int: Component] {
         var finalLabels = [Int: Component]()
         for (from, toList) in labelMerges {
             for to in toList {
@@ -237,9 +245,7 @@ class CcLabel {
         return finalLabels
     }
     
-    func getRawImageData(image: UIImage) -> [[Bool]] {
-    
-        let start = NSDate()
+    private func getRawImageData(image: UIImage) -> [[Bool]] {
     
         let cgImage = image.CGImage
         
@@ -275,14 +281,11 @@ class CcLabel {
             pointerOffset += (bytesPerRow - (width * componentsPerPixel))
         }
         
-        let end = NSDate();
-        print("Got raw image data in " + String(end.timeIntervalSinceDate(start)) + " seconds")
-        
         return data
     
     }
     
-    func padEmpty(length: Int) -> String {
+    private func padEmpty(length: Int) -> String {
         var newString = String("")
         for _ in 0 ..< length {
             newString.insert(" ", atIndex: newString.startIndex)
@@ -290,7 +293,7 @@ class CcLabel {
         return newString
     }
     
-    func pad(val: Int, length: Int) -> String {
+    private func pad(val: Int, length: Int) -> String {
         var newString = String(val)
         let lengthDifference = length - newString.characters.count
         for _ in 0 ..< lengthDifference {
@@ -299,7 +302,7 @@ class CcLabel {
         return newString
     }
  
-    class Component: CustomStringConvertible {
+    private class Component: CustomStringConvertible {
         private var childLabels: Set<Int>
         init(child: Int) {
             childLabels = [child]

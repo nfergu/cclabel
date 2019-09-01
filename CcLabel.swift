@@ -22,8 +22,8 @@ class CcLabel {
     // to apply the final (merged) labels to the content.
 
     func labelImageFast(image: UIImage, calculateBoundingBoxes: Bool) -> LabelledData {
-        let rawImageData = getRawImageData(image)
-        return labelImageFast(rawImageData, calculateBoundingBoxes: calculateBoundingBoxes)
+      let rawImageData = getRawImageData(image: image)
+      return labelImageFast(data: rawImageData, calculateBoundingBoxes: calculateBoundingBoxes)
     }
     
     func labelImageFast(data: [[Bool]], calculateBoundingBoxes: Bool) -> LabelledData {
@@ -33,13 +33,13 @@ class CcLabel {
      
         var labelMerges = [Int: Set<Int>]()
         
-        var outputData: [[Int]] = Array(count: height, repeatedValue: [])
+      var outputData: [[Int]] = Array(repeating: [], count: height)
         
         var label = 0
      
         for row in 0 ..< height {
         
-            var outputRow: [Int] = Array(count: width, repeatedValue: -1)
+          var outputRow: [Int] = Array(repeating: -1, count: width)
         
             let currentRow = data[row]
             let previousOutputRow = (row > 0 ? outputData[row-1] : [Int]())
@@ -118,9 +118,9 @@ class CcLabel {
         
         // Compress the label merges so that each label points to its ultimate
         // destination, or -1 if it is not merged
-        let finalLabels = getFinalLabels(&labelMerges)
+      let finalLabels = getFinalLabels(labelMerges: &labelMerges)
         
-        return computeFinalData(finalLabels, height: height, width: width,
+      return computeFinalData(finalLabels: finalLabels, height: height, width: width,
                 calculateBoundingBoxes: calculateBoundingBoxes, outputData: &outputData)
  
     }
@@ -144,7 +144,7 @@ class CcLabel {
         var maxLabelLength = 0
         for y in 0 ..< rawData.count {
             for x in 0 ..< rawData[0].count {
-                let labelLength = String(rawData[y][x]).characters.count
+                let labelLength = String(rawData[y][x]).count
                 if (labelLength > maxLabelLength) {
                     maxLabelLength = labelLength
                 }
@@ -154,10 +154,10 @@ class CcLabel {
             for x in 0 ..< rawData[0].count {
                 let label = rawData[y][x]
                 if (label >= 0) {
-                    print(pad(label, length: maxLabelLength), terminator: ",")
+                  print(pad(val: label, length: maxLabelLength), terminator: ",")
                 }
                 else {
-                    print(padEmpty(maxLabelLength), terminator: ",")
+                  print(padEmpty(length: maxLabelLength), terminator: ",")
                 }
             }
             print("")
@@ -165,7 +165,7 @@ class CcLabel {
     }
     
     private func computeFinalData(finalLabels: [Int: Component], height: Int, width: Int,
-            calculateBoundingBoxes: Bool, inout outputData: [[Int]]) -> LabelledData {
+                                  calculateBoundingBoxes: Bool, outputData: inout [[Int]]) -> LabelledData {
         
         var boundingBoxes = [Int: BoundingBox]()
         
@@ -192,7 +192,7 @@ class CcLabel {
                     // the previous pixel was white then we may need to create a new bounding box
                     // (this is potentially the start of the component).
                     if previousLabelInRow >= 0 {
-                        boundingBoxes[previousLabelInRow]?.expand(col-1, y: row)
+                      boundingBoxes[previousLabelInRow]?.expand(x: col-1, y: row)
                     }
                     else if label >= 0 && boundingBoxes[label] == nil {
                         boundingBoxes[label] = BoundingBox(label: label, x_start: col, y_start: row)
@@ -211,7 +211,7 @@ class CcLabel {
         
     }
     
-    private func getFinalLabels(inout labelMerges: [Int: Set<Int>]) -> [Int: Component] {
+  private func getFinalLabels( labelMerges: inout [Int: Set<Int>]) -> [Int: Component] {
         var finalLabels = [Int: Component]()
         for (from, toList) in labelMerges {
             for to in toList {
@@ -223,18 +223,20 @@ class CcLabel {
                 var toComponent = finalLabels[to]
                 if (toComponent == nil) {
                     toComponent = fromComponent
-                    fromComponent?.addChildLabel(to)
+                  fromComponent?.addChildLabel(child: to)
                     finalLabels[to] = toComponent
                 }
                 if (fromComponent !== toComponent) {
-                    if (fromComponent?.size() < toComponent?.size()) {
-                        toComponent?.merge(fromComponent!)
+                  guard let fromSize = fromComponent?.size(),
+                    let toSize = toComponent?.size() else { return finalLabels }
+                    if (fromSize < toSize) {
+                      toComponent?.merge(component: fromComponent!)
                         for child in (fromComponent?.childLabels)! {
                             finalLabels[child] = toComponent
                         }
                     }
                     else {
-                        fromComponent?.merge(toComponent!)
+                      fromComponent?.merge(component: toComponent!)
                         for child in (toComponent?.childLabels)! {
                             finalLabels[child] = fromComponent
                         }
@@ -247,20 +249,21 @@ class CcLabel {
     
     private func getRawImageData(image: UIImage) -> [[Bool]] {
     
-        let cgImage = image.CGImage
+        guard let cgImage = image.cgImage else {return [[false]]}
         
-        let width = CGImageGetWidth(cgImage)
-        let height = CGImageGetHeight(cgImage)
-        
-        let bytesPerRow = CGImageGetBytesPerRow(cgImage)
-        let bitsPerComponent = CGImageGetBitsPerComponent(cgImage)
-        let bitsPerPixel = CGImageGetBitsPerPixel(cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+      
+        let bytesPerRow = cgImage.bytesPerRow
+        let bitsPerComponent = cgImage.bitsPerComponent
+        let bitsPerPixel = cgImage.bitsPerPixel
         
         let componentsPerPixel = Int(bitsPerPixel / bitsPerComponent)
         
-        var data: [[Bool]] = Array(count: height, repeatedValue: Array(count: width, repeatedValue: false))
+        var data: [[Bool]] = Array(repeating: Array(repeating: false, count: width), count: height)
         
-        let pixelData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage))
+        guard let dataProv = cgImage.dataProvider else { return [[false]]}
+        let pixelData = dataProv.data
         let rawData: UnsafePointer<UInt8> = CFDataGetBytePtr(pixelData)
         
         let threshold = UInt8(255.0 / 2.0)
@@ -288,22 +291,22 @@ class CcLabel {
     private func padEmpty(length: Int) -> String {
         var newString = String("")
         for _ in 0 ..< length {
-            newString.insert(" ", atIndex: newString.startIndex)
+          newString.insert(contentsOf: " ", at: newString.startIndex)
         }
         return newString
     }
     
     private func pad(val: Int, length: Int) -> String {
         var newString = String(val)
-        let lengthDifference = length - newString.characters.count
+        let lengthDifference = length - newString.count
         for _ in 0 ..< lengthDifference {
-            newString.insert("0", atIndex: newString.startIndex)
+          newString.insert(contentsOf: "0", at: newString.startIndex)
         }
         return newString
     }
  
     private class Component: CustomStringConvertible {
-        private var childLabels: Set<Int>
+        fileprivate var childLabels: Set<Int>
         init(child: Int) {
             childLabels = [child]
         }
@@ -317,7 +320,7 @@ class CcLabel {
             return childLabels.count
         }
         func merge(component: Component) {
-            childLabels.unionInPlace(component.childLabels)
+            childLabels = childLabels.union(component.childLabels)
         }
         func addChild(child: Int) {
             childLabels.insert(child)
